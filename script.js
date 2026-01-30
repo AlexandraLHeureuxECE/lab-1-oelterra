@@ -1,6 +1,3 @@
-// Tic-Tac-Toe (2 players, same device)
-// Extra feature implemented: Keyboard support (Arrow keys + Enter/Space + R)
-
 const boardEl = document.getElementById("board");
 const statusEl = document.getElementById("status");
 const restartBtn = document.getElementById("restartBtn");
@@ -12,7 +9,6 @@ let board = Array(SIZE).fill(null);
 let currentPlayer = "X";
 let gameOver = false;
 
-// Track "keyboard focus index" for arrow key navigation
 let focusIndex = 0;
 
 const WIN_LINES = [
@@ -37,13 +33,21 @@ function createBoardUI() {
     btn.setAttribute("aria-label", `Cell ${i + 1}`);
     btn.dataset.index = String(i);
 
-    btn.addEventListener("click", () => handleMove(i));
+    btn.addEventListener("click", () => {
+      handleMove(i);
+      // after click move, keep keyboard usable too
+      focusNextPlayable(i);
+    });
+
     btn.addEventListener("focus", () => {
       focusIndex = i;
     });
 
     boardEl.appendChild(btn);
   }
+
+  // Make the board itself focusable (helps keep keyboard active)
+  boardEl.tabIndex = 0;
 }
 
 function render() {
@@ -68,15 +72,14 @@ function render() {
 }
 
 function handleMove(index) {
-  if (gameOver) return;
-  if (board[index] !== null) return;
+  if (gameOver) return false;
+  if (board[index] !== null) return false;
 
   board[index] = currentPlayer;
-
-  // swap player
   currentPlayer = currentPlayer === "X" ? "O" : "X";
 
   render();
+  return true;
 }
 
 function checkWinner() {
@@ -94,33 +97,46 @@ function highlightWin(line) {
   line.forEach((i) => cells[i].classList.add("win"));
 }
 
-function restartGame(keepScoreLikeState = true) {
-  // keepScoreLikeState exists to show “localized manual control” capability,
-  // but we are not tracking score in this version.
+function restartGame() {
   board = Array(SIZE).fill(null);
   currentPlayer = "X";
   gameOver = false;
   render();
-  focusCell(0);
+  focusNextPlayable(0);
 }
 
 function focusCell(index) {
   const cells = boardEl.querySelectorAll(".cell");
   const safeIndex = Math.max(0, Math.min(SIZE - 1, index));
   focusIndex = safeIndex;
-  cells[safeIndex]?.focus();
+
+  if (cells[safeIndex] && !cells[safeIndex].disabled) {
+    cells[safeIndex].focus();
+  } else {
+    boardEl.focus();
+  }
 }
 
-// Keyboard support:
-// Arrow keys move focus around the 3x3 grid
-// Enter/Space places a mark
-// R restarts
+function focusNextPlayable(startIndex) {
+  const cells = boardEl.querySelectorAll(".cell");
+  if (gameOver) {
+    boardEl.focus();
+    return;
+  }
+
+  for (let offset = 1; offset <= SIZE; offset++) {
+    const idx = (startIndex + offset) % SIZE;
+    if (board[idx] === null && cells[idx] && !cells[idx].disabled) {
+      focusCell(idx);
+      return;
+    }
+  }
+
+  boardEl.focus();
+}
+
 function onKeyDown(e) {
   const key = e.key.toLowerCase();
-
-  // Only handle if focus is inside the board or the user presses R
-  const active = document.activeElement;
-  const isCell = active && active.classList && active.classList.contains("cell");
 
   if (key === "r") {
     e.preventDefault();
@@ -128,7 +144,11 @@ function onKeyDown(e) {
     return;
   }
 
-  if (!isCell) return;
+  const active = document.activeElement;
+  const focusInBoard =
+    active === boardEl || (active && boardEl.contains(active));
+
+  if (!focusInBoard) return;
 
   let next = focusIndex;
 
@@ -139,22 +159,24 @@ function onKeyDown(e) {
 
   if (next !== focusIndex) {
     e.preventDefault();
+    focusIndex = next;
     focusCell(next);
     return;
   }
 
   if (key === "enter" || key === " ") {
     e.preventDefault();
-    handleMove(focusIndex);
+    const moved = handleMove(focusIndex);
+    if (moved) {
+      focusNextPlayable(focusIndex);
+    }
   }
 }
 
-// Buttons
 restartBtn.addEventListener("click", () => restartGame());
 clearBtn.addEventListener("click", () => restartGame());
 
-// Init
 createBoardUI();
 render();
-focusCell(0);
+focusNextPlayable(0);
 document.addEventListener("keydown", onKeyDown);
